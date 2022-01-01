@@ -1,6 +1,7 @@
 import requests
 import base64
 import json
+import hashlib
 
 from requests.api import request
 
@@ -11,7 +12,8 @@ class TendaError(Exception):
 class TendaManager(object):
 
     __AUTH_URL = 'http://{}/login/Auth'
-    __GET_QOS = 'http://{}/goform/getQos'
+    __GET_ONLINE_LIST = 'http://{}/goform/getOnlineList'
+    __GET_BLACK_LIST = 'http://{}/goform/getBlackRuleList'
     __SET_QOS = 'http://{}/goform/setQos'
     __REBOOT_URL = 'http://{}/goform/sysReboot'
     __WIFI_SETTINGS_URL = 'http://{}/goform/getWifi'
@@ -21,25 +23,27 @@ class TendaManager(object):
         self.IP = IP
         self.PASSWORD = PASSWORD
         self.__AUTH_URL = self.__AUTH_URL.format(IP)
-        self.__GET_QOS = self.__GET_QOS.format(IP)
+        self.__GET_ONLINE_LIST = self.__GET_ONLINE_LIST.format(IP)
+        self.__GET_BLACK_LIST = self.__GET_BLACK_LIST.format(IP)
         self.__SET_QOS = self.__SET_QOS.format(IP)
         self.__REBOOT_URL = self.__REBOOT_URL.format(IP)
         self.do_login()
 
-    def __encodeB64(self, string):
-        return base64.b64encode(string.encode()).decode("utf-8")
+    def __encodePassword(self, string):
+        return hashlib.md5(string.encode('utf-8')).hexdigest()
 
     def __bake_requests(self):
         return {
             'Cookie': 'bLanguage=en; {}'.format(self.__COOKIE),
             'DNT': '1',
             'Host': '%s' % (self.IP),
-            'Referrer': 'http://%s/index.html' % (self.IP)
+            'Referrer': 'http://%s/main.html' % (self.IP)
         }
 
     def do_login(self):
         form_data = {
-            'password': self.__encodeB64(self.PASSWORD)
+            'username': 'admin',
+            'password': self.__encodePassword(self.PASSWORD)
         }
         try:
             response = requests.post(
@@ -55,18 +59,14 @@ class TendaManager(object):
     def get_online_devices_with_stats(self):
         request_headers = self.__bake_requests()
 
-        params = {
-            'modules': 'onlineList'
-        }
-
         response = requests.get(
-            self.__GET_QOS, params, headers=request_headers, allow_redirects=False)
+            self.__GET_ONLINE_LIST, headers=request_headers, allow_redirects=False)
 
         if response.status_code == 302:
             self.do_login()
             return self.get_online_devices_with_stats()
         else:
-            return response.json()['onlineList']
+            return response.json()
         
     def limit_device(self, mac_address, download_speed, upload_speed):
         def set_limit_settings(device):
@@ -115,18 +115,14 @@ class TendaManager(object):
     def get_black_list(self):
         request_headers = self.__bake_requests()
 
-        params = {
-            'modules': 'blackList'
-        }
-
         response = requests.get(
-            self.__GET_QOS, params, headers=request_headers, allow_redirects=False)
+            self.__GET_BLACK_LIST, headers=request_headers, allow_redirects=False)
 
         if response.status_code == 302:
             self.do_login()
             return self.get_black_list()
         else:
-            return response.json()['blackList']
+            return response.json()
 
     def block_device(self, mac_address):
         def set_block_settings(device):
@@ -181,7 +177,7 @@ class TendaManager(object):
         }
 
         response = requests.post(
-            self.__REBOOT_URL, data=form_data, headers=request_headers, allow_redirects=False)
+            self.__WIFI_SETTINGS_URL, data=form_data, headers=request_headers, allow_redirects=False)
 
         if response.status_code == 302:
             self.do_login()
@@ -200,7 +196,7 @@ class TendaManager(object):
         }
 
         response = requests.post(
-            self.__WIFI_SETTINGS_URL, data=form_data, headers=request_headers, allow_redirects=False)
+            self.__REBOOT_URL, data=form_data, headers=request_headers, allow_redirects=False)
 
         if response.status_code == 302:
             self.do_login()
